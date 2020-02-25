@@ -129,10 +129,12 @@ use constant {
 };
 
 # Configure basic variables for program operation
-our ($_socket, $_clean, %data);
+our ($_socket, $_clean, $_perstatus, $_perserver, %data);
 # Get the location of the socket we'll connect to
 $_socket = exists $ENV{'socket'} ? $ENV{'socket'} : '/var/run/haproxy.sock';
 $_clean  = (exists $ENV{'clean'} ? quotemeta $ENV{'clean'} : '');
+$_perstatus = exists $ENV{'perstatus'} ? $ENV{'perstatus'}: 1;
+$_perserver = exists $ENV{'perserver'} ? $ENV{'perserver'}: 1;
 
 MAIN: {
   # This is a special multi-graph plugin, so make sure that whatever version
@@ -444,6 +446,7 @@ sub haproxy_bandwidth {
           $in{'label'} = $out{'label'} = 'Bandwidth';
           $out{'negative'} = 'total_in';
           $out{'draw'} = LINE1;
+	  next unless $_perserver;
           $out{'colour'} = COLOUR_BLACK;
 
           mg_config(TYPE_BANDWIDTH, $data{$service}{'type'}, ['bandwidth', $service, $server],
@@ -497,6 +500,7 @@ sub haproxy_bandwidth {
           next if $data{$service}{'servers'}{$server}{'backup'};
           $values{"${server}_in"}  = $data{$service}{'servers'}{$server}{'bandwidth'}{'in'};
           $values{"${server}_out"} = $data{$service}{'servers'}{$server}{'bandwidth'}{'out'};
+	  next unless $_perserver;
           mg_fetch($data{$service}{'type'}, ['bandwidth', $service, $server], {
             total_in  => $data{$service}{'servers'}{$server}{'bandwidth'}{'in'},
             total_out => $data{$service}{'servers'}{$server}{'bandwidth'}{'out'},
@@ -556,6 +560,7 @@ sub haproxy_timing {
           my %response  = %time; $response{'label'} = 'Response';
           my %total     = %time; $total{'label'}    = 'Total';
 
+	  next unless $_perserver;
           mg_config(TYPE_TIMING, TYPE_BACKEND, ['timing', $service, $server],
                     'Server Timing for '.$service.' via '.$server, {
             queue     => \%queue,
@@ -599,6 +604,7 @@ sub haproxy_timing {
         foreach my $server (sort keys %{$data{$service}{'servers'}}) {
           next if $data{$service}{'servers'}{$server}{'backup'};
           $values{$server} = $data{$service}{'servers'}{$server}{'timing'}{'total'};
+	  next unless $_perserver;
           mg_fetch(TYPE_BACKEND, ['timing', $service, $server],
                    $data{$service}{'servers'}{$server}{'timing'});
         }
@@ -700,6 +706,7 @@ sub haproxy_sessions {
           $out{'negative'} = 'queued';
           $out{'draw'} = LINE1;
 
+	  next unless $_perserver;
           mg_config(TYPE_SESSIONS, TYPE_BACKEND, ['sessions', $service, $server],
                     'Sessions for '.$service.' via '.$server, {
             queued    => \%queued,
@@ -754,6 +761,7 @@ sub haproxy_sessions {
           $values{"${server}_sessions"} = $data{$service}{'servers'}{$server}{'sessions'};
           $values{"${server}_queued"} = $data{$service}{'servers'}{$server}{'queued'};
 
+	  next unless $_perserver;
           mg_fetch(TYPE_BACKEND, ['sessions', $service, $server], {
             sessions  => $data{$service}{'servers'}{$server}{'sessions'},
             queued    => $data{$service}{'servers'}{$server}{'queued'},
@@ -841,6 +849,7 @@ sub haproxy_responses {
                   type    => DERIVE,
                   draw    => AREASTACK,
                 );
+		next unless $_perserver;
                 mg_config(TYPE_RESPONSES, $data{$service}{'type'}, ['responses', $service, $response, $server],
                           "${response_} Responses for ${service} via ${server}", {
                   responses => {
@@ -858,6 +867,7 @@ sub haproxy_responses {
                 colour  => COLOUR_BLACK,
               );
 
+	      next unless $_perstatus;
               mg_config(TYPE_RESPONSES, $data{$service}{'type'}, ['responses', $service, $response],
                         "${response_} Responses for ${service}", \%subsubmetrics);
             }
@@ -884,6 +894,7 @@ sub haproxy_responses {
         next unless $data{$service}{'type'} eq TYPE_FRONTEND;
         $values{$service} = $data{$service}{'responses'}{'total'};
         mg_fetch(TYPE_FRONTEND, ['responses', $service], $data{$service}{'responses'});
+	next unless $_perstatus;
         foreach my $response (sort keys %{$data{$service}{'responses'}}) {
           mg_fetch(TYPE_FRONTEND, ['responses', $service, $response], {
             responses => $data{$service}{'responses'}{$response}
@@ -906,6 +917,7 @@ sub haproxy_responses {
 
         mg_fetch(TYPE_BACKEND, ['responses', $service], $data{$service}{'responses'});
 
+	next unless $_perstatus;
         foreach my $response (sort keys %{$data{$service}{'responses'}}) {
           undef %subvalues;
 
@@ -913,6 +925,7 @@ sub haproxy_responses {
             next if $data{$service}{'servers'}{$server}{'backup'};
 
             $subvalues{$server} = $data{$service}{'servers'}{$server}{'responses'}{$response};
+	    next unless $_perserver;
             mg_fetch(TYPE_BACKEND, ['responses', $service, $response, $server], {
               responses => $data{$service}{'servers'}{$server}{'responses'}{$response},
             });
